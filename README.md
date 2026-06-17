@@ -1,166 +1,129 @@
-# HermesOC — Hermes Agent + OpenCode Integration
+# HermesOC — OpenCode Coding Agent Built Into Hermes
 
-> **Not just "using the OpenCode skill in Hermes" — a deeply integrated fork where coding delegation is built into the system prompt, toolset, and provider configuration.**
-
-## How This Differs from the Default OpenCode Skill
-
-The [bundled OpenCode skill](https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/autonomous-ai-agents/autonomous-ai-agents-opencode) in upstream Hermes is a **skill document** — a set of instructions that teaches the agent *how to use* OpenCode CLI via `terminal()` calls. The agent reads the skill, then manually constructs `opencode run '...'` commands.
-
-HermesOC is fundamentally different:
-
-| Aspect | OpenCode Skill (upstream) | HermesOC (this project) |
-|--------|--------------------------|------------------------|
-| **Integration level** | Skill document (instructions only) | Core tool + system prompt + provider passthrough |
-| **How coding is triggered** | Agent decides to run `terminal("opencode run '...'")` | Agent calls `opencode_code(task="...")` — a first-class tool |
-| **Provider config** | Manual — agent must figure out env vars | **Automatic** — OpenCode inherits model + base_url + API key from Hermes config |
-| **System prompt** | No coding-routing guidance | Built-in `OPENCODE_DELEGATION_GUIDANCE` block tells Hermes to route coding to OpenCode |
-| **Toolset integration** | Not in any toolset — relies on `terminal` | `opencode_code` in `_HERMES_CORE_TOOLS`, coding posture, and all platform toolsets |
-| **Output handling** | Raw terminal stdout | Structured JSON: `success`, `output`, `git_diff`, `stderr`, `model`, `workdir` |
-| **Model auto-detection** | None — agent must specify `--model` | Reads Hermes config and auto-maps to OpenCode model ID |
-| **Desktop apps** | Included (Electron, Tauri installer) | Stripped — TUI + gateway + web UI only |
-| **CLI branding** | `hermes` | `hermesoc` (with `hermes` alias for compat) |
-| **Identity** | "Hermes Agent by Nous Research" | "HermesOC (Hermes + OpenCode)" |
-
-**In short:** The skill approach is "teach the agent to use OpenCode as a tool." HermesOC is "make OpenCode a native part of the agent's architecture."
+> **A Hermes Agent plugin that embeds an OpenCode-style coding agent. No OpenCode CLI required. No conflicts with existing installs.**
 
 ## What It Is
 
-HermesOC is a fork of [Hermes Agent](https://github.com/NousResearch/hermes-agent) integrated with [OpenCode](https://opencode.ai) for a unified AI agent experience where **Hermes orchestrates and OpenCode codes**.
+HermesOC is a **plugin** that installs alongside your existing Hermes Agent. It adds an `opencode_code` tool that delegates coding tasks to an embedded coding engine — no external `opencode` CLI install needed, no conflicts with your existing Hermes or OpenCode setups.
 
-- **Hermes Agent** handles: orchestration, system operations, research, messaging, scheduling, memory, skills, web/browser automation
-- **OpenCode** handles: all substantive coding tasks — writing features, refactoring, debugging, code review, test writing
-- **Hermes** can still do quick trivial code changes (1-2 line edits via `patch`), but delegates anything larger to OpenCode via the `opencode_code` tool
+- **Installs as a plugin** — doesn't modify Hermes core files
+- **Embedded engine** — the coding agent runs in-process using Hermes's own provider config
+- **Zero external deps** — no `opencode` CLI, no Node.js, no separate process
+- **Auto-inherits config** — uses your Hermes model, base_url, and API key automatically
 
-## Key Changes from Upstream Hermes
+## How It Differs from the Bundled OpenCode Skill
 
-1. **New `opencode_code` tool** (`tools/opencode_tool.py`) — a first-class Hermes tool that delegates coding tasks to OpenCode CLI as a subprocess, with structured JSON output
-2. **System prompt integration** (`agent/prompt_builder.py`) — `OPENCODE_DELEGATION_GUIDANCE` block instructs Hermes to route coding work through OpenCode as its primary coding method
-3. **Provider passthrough** — OpenCode inherits the same model, base_url, and API key from Hermes config automatically (no manual env var setup)
-4. **Desktop apps stripped** — no Electron/Desktop app, just TUI + gateway + web UI
-5. **CLI alias** — `hermesoc` command (with `hermes` kept for backward compatibility)
-6. **Toolset integration** — `opencode_code` added to `_HERMES_CORE_TOOLS`, coding posture, hermes-acp, and hermes-api-server toolsets
+The [bundled OpenCode skill](https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/autonomous-ai-agents/autonomous-ai-agents-opencode) in upstream Hermes is a **skill document** — instructions that teach the agent to run `opencode` CLI commands via `terminal()`. It requires the `opencode` CLI to be installed separately.
 
-## Architecture
-
-```
-User → HermesOC (Hermes Agent core)
-         ├── Research, system ops, messaging → Hermes tools (terminal, web, browser, etc.)
-         ├── Quick file edits → read_file, write_file, patch
-         └── Coding tasks → opencode_code tool → OpenCode CLI subprocess
-                                              → Same model + provider as Hermes (auto-inherited)
-                                              → Returns structured JSON: output + git diff
-```
+| Aspect | OpenCode Skill (upstream) | HermesOC (this plugin) |
+|--------|--------------------------|------------------------|
+| **What it is** | Skill document (instructions) | Plugin with embedded engine |
+| **Requires OpenCode CLI** | Yes (`npm i -g opencode-ai`) | **No** — engine is built in |
+| **Requires Node.js** | Yes | **No** |
+| **How coding is triggered** | Agent runs `terminal("opencode run '...'")` | Agent calls `opencode_code(task="...")` — first-class tool |
+| **Provider config** | Manual env var setup | **Automatic** — inherits from Hermes config |
+| **System prompt** | No coding-routing guidance | Built-in guidance injected via plugin hook |
+| **Conflicts with existing installs** | Shares the `opencode` binary | **None** — completely independent |
+| **Output** | Raw terminal stdout | Structured JSON: `success`, `output`, `edits`, `git_diff` |
+| **Installs alongside Hermes** | N/A (it's a skill, always present) | **Yes** — plugin, no core modifications |
 
 ## Installation
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 18+ (for OpenCode CLI)
-- curl
+- Hermes Agent already installed ([install here](https://hermes-agent.nousresearch.com/docs))
 
 ### Install HermesOC
 
 ```bash
-# Clone the repo
 git clone https://github.com/evangit2/hermes-opencode.git
-cd hermes-opencode/hermes
-
-# Install HermesOC
-pip install -e .
-
-# Install OpenCode CLI
-npm i -g opencode-ai@latest
-
-# Verify
-hermesoc --version
-opencode --version
+cd hermes-opencode
+bash install.sh
 ```
 
-### Configure Provider
+That's it. The plugin installs to `~/.hermes/plugins/hermesoc/` and registers automatically.
 
-HermesOC uses the same config as Hermes Agent. The model and provider settings are shared between Hermes and OpenCode automatically.
+### Verify
 
 ```bash
-# Set your model and provider
-hermesoc config set model.default "your-model-name"
-hermesoc config set model.provider "your-provider"
-
-# Or use the interactive setup
-hermesoc setup
+hermes tools list | grep opencode
+# Should show: ✓ enabled  opencode  🔧 OpenCode coding agent
 ```
-
-OpenCode automatically inherits:
-- The API base URL from `model.base_url`
-- The API key from `model.api_key` or auxiliary config
-- The model name (mapped to OpenCode's format — e.g. `umans/umans-glm-5.2` → `hermes/umans/umans-glm-5.2`)
 
 ## Usage
 
-### Interactive Chat
-
-```bash
-hermesoc
-```
-
-### Single Query
-
-```bash
-hermesoc chat -q "What files are in this project?"
-```
-
-### Coding Through OpenCode
-
-When you ask HermesOC to write or modify code, it automatically delegates to OpenCode:
+Once installed, Hermes automatically has the `opencode_code` tool available. When you ask Hermes to write or modify code, it delegates to the embedded engine:
 
 ```
-> Add a retry decorator to the API client in src/client.py
+> Create a Flask app with a /health endpoint in /tmp/myapp
 
-# HermesOC calls opencode_code with the task
-# OpenCode reads the codebase, makes the edit, returns the result
-# HermesOC verifies the change and reports back
+# Hermes calls opencode_code(task="...", workdir="/tmp/myapp")
+# The embedded engine:
+#   1. Reads the codebase context (file tree, git status, relevant files)
+#   2. Sends the task to the LLM using your Hermes provider config
+#   3. Parses the response for file edits
+#   4. Applies the edits to disk
+#   5. Returns structured JSON with git diff
 ```
 
-### Gateway (Messaging Platforms)
-
-Same as Hermes Agent — Telegram, Discord, Slack, etc.
-
-```bash
-hermesoc gateway setup
-hermesoc gateway start
-```
-
-## OpenCode Tool Reference
-
-The `opencode_code` tool accepts:
+### Tool Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `task` | string | The coding task description (required) |
 | `workdir` | string | Working directory for the codebase |
-| `model` | string | Override the OpenCode model ID |
+| `model` | string | Override the model ID (auto-detected if empty) |
 | `files` | array | File paths to attach as context |
-| `thinking` | boolean | Show model reasoning blocks |
+| `thinking` | boolean | Show model reasoning in output |
 | `timeout` | integer | Max seconds (default 300) |
 
-Returns JSON with: `success`, `output`, `stderr`, `exit_code`, `model`, `workdir`, `git_diff`
+### Output Format
+
+```json
+{
+  "success": true,
+  "output": "Added /health endpoint to app.py...",
+  "edits": [{"file": "app.py", "status": "written"}],
+  "git_diff": "app.py | 5 +++++",
+  "model": "umans/umans-glm-5.2",
+  "workdir": "/tmp/myapp",
+  "files_modified": 1
+}
+```
+
+## Architecture
+
+```
+User → Hermes Agent (unchanged)
+         ├── Normal tools (terminal, web, browser, etc.)
+         └── opencode_code tool (from HermesOC plugin)
+              ├── Read codebase context (file tree, git status, files)
+              ├── Call LLM using Hermes's provider config (in-process)
+              ├── Parse response for EDIT blocks
+              ├── Apply file edits to disk
+              └── Return JSON with output + git diff
+```
+
+**Key design decisions:**
+- **In-process, not subprocess** — no external CLI, no Node.js, no process management
+- **Uses Hermes's HTTP client** (httpx) and provider config — no separate auth setup
+- **Plugin-based** — installs to `~/.hermes/plugins/hermesoc/`, doesn't touch core files
+- **System prompt injection via hook** — `pre_session_init` hook adds coding-routing guidance
 
 ## Repository Structure
 
 ```
 hermes-opencode/
-├── README.md              ← this file
-├── hermes/                ← Hermes Agent fork (Python)
-│   ├── tools/opencode_tool.py   ← OpenCode integration tool (NEW)
-│   ├── agent/
-│   │   ├── prompt_builder.py    ← System prompt with OpenCode guidance (MODIFIED)
-│   │   └── system_prompt.py     ← Prompt assembly with OpenCode block (MODIFIED)
-│   ├── toolsets.py              ← Toolset definitions — includes opencode (MODIFIED)
-│   ├── pyproject.toml           ← hermesoc entry point, hermes-oc package name (MODIFIED)
-│   └── ...                ← Rest of Hermes Agent (desktop apps stripped)
-└── opencode/              ← OpenCode fork (TypeScript) — for customization
+├── README.md
+├── install.sh              ← one-command installer
+├── pyproject.toml          ← pip package + entry-point registration
+└── hermesoc/               ← the plugin
+    ├── __init__.py         ← plugin entry point (register function)
+    ├── plugin.yaml         ← Hermes plugin manifest
+    └── tools/
+        └── opencode_tool.py  ← embedded coding engine
 ```
 
 ## License
 
-MIT (both Hermes Agent and OpenCode are MIT licensed)
+MIT

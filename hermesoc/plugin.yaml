@@ -1,0 +1,6 @@
+name: hermesoc
+version: 0.1.0
+description: "OpenCode coding agent built into Hermes. Delegates coding tasks to an embedded OpenCode engine — no external CLI install required, no conflicts with existing Hermes or OpenCode installs."
+author: "evangit2"
+hooks:
+  - pre_session_init
